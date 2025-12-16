@@ -2,8 +2,6 @@
 // SETUP E DIPENDENZE
 // ====================================================================
 
-// Modulo serverless specifico per Stremio (necessario per Vercel/Lambda)
-const createHandler = require('@stremio/stremio-api-v2-handler'); 
 const { addonBuilder } = require('stremio-addon-sdk'); 
 const { default: fetch } = require('node-fetch'); 
 
@@ -11,15 +9,9 @@ const { default: fetch } = require('node-fetch');
 // !!! ⚠️ CONFIGURAZIONE NECESSARIA ⚠️ !!!
 // ====================================================================
 
-// 1. CHIAVE API DI THE MOVIE DATABASE (TMDB) - LETTA DA VERCEL ENVIRONMENT VARIABLE
-// La chiave DEVE essere impostata su Vercel come variabile d'ambiente TMDB_API_KEY
 const TMDB_API_KEY = process.env.TMDB_API_KEY; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-
-// URL di base della tua API VixSrc
 const VIXSRC_BASE_URL = 'https://vixsrc.to';
-
-// LIMITE DEL CATALOGO
 const CATALOG_LIMIT = 200;
 
 // ====================================================================
@@ -28,7 +20,7 @@ const CATALOG_LIMIT = 200;
 
 const MANIFEST = {
     id: 'org.vixsrc.stremioaddon', 
-    version: '1.0.7', 
+    version: '1.0.8', 
     name: 'VixSrc API Addon',
     description: 'Addon che integra i contenuti VixSrc usando gli ID TMDB.',
     resources: ['catalog', 'stream'], 
@@ -53,16 +45,12 @@ const MANIFEST = {
 const builder = new addonBuilder(MANIFEST);
 
 // ====================================================================
-// FUNZIONI DI UTILITY
+// FUNZIONI DI UTILITY (Nessuna modifica)
 // ====================================================================
 
-/**
- * Recupera i dettagli di base (titolo, poster) da TMDB.
- */
 async function getTmdbDetails(tmdbId, type) {
     if (!TMDB_API_KEY) {
-        console.error('[TMDB API] Chiave API mancante. Impossibile recuperare i dettagli.');
-        // In un ambiente reale, questo dovrebbe causare un errore HTTP
+        console.error('[TMDB API] Chiave API mancante.');
         return null; 
     }
     const tmdbType = (type === 'series') ? 'tv' : 'movie';
@@ -70,12 +58,8 @@ async function getTmdbDetails(tmdbId, type) {
     
     try {
         const response = await fetch(detailUrl);
-        if (!response.ok) {
-            console.warn(`[TMDB API] Impossibile recuperare i dettagli per ID ${tmdbId}`);
-            return null;
-        }
+        if (!response.ok) return null;
         const data = await response.json();
-
         return {
             id: `tmdb:${tmdbId}`, 
             type: type,
@@ -83,27 +67,22 @@ async function getTmdbDetails(tmdbId, type) {
             poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
         };
     } catch (error) {
-        console.error(`[TMDB API] Errore durante il recupero per ${tmdbId}:`, error.message);
+        console.error(`[TMDB API] Errore:`, error.message);
         return null;
     }
 }
 
 // ====================================================================
-// 1. CATALOG HANDLER
+// 1. CATALOG HANDLER (Nessuna modifica)
 // ====================================================================
 
 builder.defineCatalogHandler(async (args) => {
     const apiType = (args.type === 'series') ? 'tv' : 'movie'; 
     const vixsrcListUrl = `${VIXSRC_BASE_URL}/api/list/${apiType}?lang=it`;
 
-    // console.log(`[CATALOG] Richiesta lista VixSrc: ${vixsrcListUrl}`);
-
     try {
         const listResponse = await fetch(vixsrcListUrl);
-        if (!listResponse.ok) {
-            console.error(`[CATALOG] Errore API VixSrc: Status ${listResponse.status}`);
-            return { metas: [] };
-        }
+        if (!listResponse.ok) return { metas: [] };
         const listData = await listResponse.json();
         
         const tmdbIds = listData
@@ -111,14 +90,10 @@ builder.defineCatalogHandler(async (args) => {
             .map(item => item.tmdb_id)
             .slice(0, CATALOG_LIMIT); 
 
-        // console.log(`[CATALOG] Trovati ${tmdbIds.length} ID. Richiesta Metadati a TMDB...`);
-
         const detailPromises = tmdbIds.map(id => getTmdbDetails(id, args.type));
         
         const metas = (await Promise.all(detailPromises))
             .filter(meta => meta !== null); 
-
-        // console.log(`[CATALOG] Restituiti ${metas.length} elementi.`);
         
         return { metas: metas };
         
@@ -130,7 +105,7 @@ builder.defineCatalogHandler(async (args) => {
 
 
 // ====================================================================
-// 2. STREAM HANDLER
+// 2. STREAM HANDLER (Nessuna modifica)
 // ====================================================================
 
 builder.defineStreamHandler(async (args) => {
@@ -142,17 +117,12 @@ builder.defineStreamHandler(async (args) => {
     
     const parts = id.split(':'); 
     const tmdbId = parts[1];
-
     let streamUrl = '';
 
-    if (!tmdbId) {
-        console.warn(`[STREAM] ID TMDB mancante per ${id}`);
-        return { streams: [] };
-    }
+    if (!tmdbId) return { streams: [] };
 
     if (type === 'movie') {
         streamUrl = `${VIXSRC_BASE_URL}/movie/${tmdbId}`;
-
     } else if (type === 'series' && parts.length === 4) {
         const season = parts[2];
         const episode = parts[3];
@@ -161,7 +131,6 @@ builder.defineStreamHandler(async (args) => {
 
     if (streamUrl) {
         const params = 'primaryColor=B20710&secondaryColor=170000&lang=it&autoplay=true';
-        
         streams.push({
             url: `${streamUrl}?${params}`,
             title: 'VixSrc Embed Player',
@@ -174,16 +143,18 @@ builder.defineStreamHandler(async (args) => {
 });
 
 // ====================================================================
-// 3. ESPORTAZIONE PER VERCEL SERVERLESS
+// 3. ESPORTAZIONE PER VERCEL SERVERLESS STANDARD
 // ====================================================================
 
-// Otteniamo l'interfaccia dell'addon
-const addonInterface = builder.getInterface();
+const serve = builder.getInterface();
 
-// Creiamo l'handler serverless (compatibile con Vercel)
-const handler = createHandler(addonInterface);
+module.exports = (req, res) => {
+    // Questo è l'handler Vercel standard che Vercel supporta nativamente.
+    serve(req, res, () => {
+        // Fallback per richieste non gestite
+        res.statusCode = 404;
+        res.end('Not Found');
+    });
+};
 
-// Esportiamo la funzione handler per Vercel
-module.exports = handler;
-
-console.log('🚀 Addon VixSrc pronto per il deploy Serverless.');
+console.log('🚀 Addon VixSrc pronto per il deploy Serverless con Vercel standard.');
