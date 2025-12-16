@@ -2,9 +2,9 @@
 // SETUP E DIPENDENZE
 // ====================================================================
 
-// Rimuoviamo l'import di serveHTTP, non è usato in Serverless
+// Modulo serverless specifico per Stremio (necessario per Vercel/Lambda)
+const createHandler = require('@stremio/stremio-api-v2-handler'); 
 const { addonBuilder } = require('stremio-addon-sdk'); 
-// Non serve più l'import di 'http'
 const { default: fetch } = require('node-fetch'); 
 
 // ====================================================================
@@ -12,7 +12,7 @@ const { default: fetch } = require('node-fetch');
 // ====================================================================
 
 // 1. CHIAVE API DI THE MOVIE DATABASE (TMDB) - LETTA DA VERCEL ENVIRONMENT VARIABLE
-// DEVI AVER IMPOSTATO TMDB_API_KEY su Vercel!
+// La chiave DEVE essere impostata su Vercel come variabile d'ambiente TMDB_API_KEY
 const TMDB_API_KEY = process.env.TMDB_API_KEY; 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
@@ -28,7 +28,7 @@ const CATALOG_LIMIT = 200;
 
 const MANIFEST = {
     id: 'org.vixsrc.stremioaddon', 
-    version: '1.0.6', // Versione aggiornata
+    version: '1.0.7', 
     name: 'VixSrc API Addon',
     description: 'Addon che integra i contenuti VixSrc usando gli ID TMDB.',
     resources: ['catalog', 'stream'], 
@@ -62,7 +62,8 @@ const builder = new addonBuilder(MANIFEST);
 async function getTmdbDetails(tmdbId, type) {
     if (!TMDB_API_KEY) {
         console.error('[TMDB API] Chiave API mancante. Impossibile recuperare i dettagli.');
-        return null;
+        // In un ambiente reale, questo dovrebbe causare un errore HTTP
+        return null; 
     }
     const tmdbType = (type === 'series') ? 'tv' : 'movie';
     const detailUrl = `${TMDB_BASE_URL}/${tmdbType}/${tmdbId}?api_key=${TMDB_API_KEY}&language=it-IT`;
@@ -137,7 +138,7 @@ builder.defineStreamHandler(async (args) => {
     const id = args.id; 
     const type = args.type;
 
-    // console.log(`[STREAM] Richiesta INIZIO per ID: ${id}, Tipo: ${type}`); 
+    console.log(`[STREAM] Richiesta INIZIO per ID: ${id}, Tipo: ${type}`); 
     
     const parts = id.split(':'); 
     const tmdbId = parts[1];
@@ -145,7 +146,7 @@ builder.defineStreamHandler(async (args) => {
     let streamUrl = '';
 
     if (!tmdbId) {
-        // console.warn(`[STREAM] ID TMDB mancante per ${id}`);
+        console.warn(`[STREAM] ID TMDB mancante per ${id}`);
         return { streams: [] };
     }
 
@@ -166,27 +167,23 @@ builder.defineStreamHandler(async (args) => {
             title: 'VixSrc Embed Player',
             name: 'VixSrc', 
         });
+        console.log(`[STREAM] Trovato URL stream: ${streams[0].url}`);
     }
-
-    // console.log(`[STREAM] Trovati ${streams.length} streams per ${id}.`);
 
     return { streams: streams };
 });
 
 // ====================================================================
-// ESPORTAZIONE PER VERCEL SERVERLESS (METODO DEFINITIVO)
+// 3. ESPORTAZIONE PER VERCEL SERVERLESS
 // ====================================================================
-
-// Importiamo l'handler serverless (aggiungi questo require all'inizio del file!)
-const createHandler = require('@stremio/stremio-api-v2-handler'); 
 
 // Otteniamo l'interfaccia dell'addon
 const addonInterface = builder.getInterface();
 
-// Creiamo l'handler serverless
+// Creiamo l'handler serverless (compatibile con Vercel)
 const handler = createHandler(addonInterface);
 
 // Esportiamo la funzione handler per Vercel
 module.exports = handler;
 
-console.log('🚀 Addon VixSrc pronto per il deploy Serverless (Handler Stremio).');
+console.log('🚀 Addon VixSrc pronto per il deploy Serverless.');
