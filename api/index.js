@@ -174,18 +174,19 @@ builder.defineStreamHandler(async (args) => {
 });
 
 // ====================================================================
-// ESPORTAZIONE PER VERCEL SERVERLESS
+// ESPORTAZIONE PER VERCEL SERVERLESS (METODO DEFINITIVO)
 // ====================================================================
 
-const serve = builder.getInterface();
+// Importiamo l'handler serverless (aggiungi questo require all'inizio del file!)
+const createHandler = require('@stremio/stremio-api-v2-handler'); 
 
-module.exports = (req, res) => {
-    // Vercel passa la richiesta HTTP e la risolve tramite l'interfaccia SDK
-    serve(req, res, () => {
-        // Fallback per richieste non gestite
-        res.statusCode = 404;
-        res.end('Not Found');
-    });
-};
+// Otteniamo l'interfaccia dell'addon
+const addonInterface = builder.getInterface();
 
-console.log('🚀 Addon VixSrc pronto per il deploy Serverless.');
+// Creiamo l'handler serverless
+const handler = createHandler(addonInterface);
+
+// Esportiamo la funzione handler per Vercel
+module.exports = handler;
+
+console.log('🚀 Addon VixSrc pronto per il deploy Serverless (Handler Stremio).');
